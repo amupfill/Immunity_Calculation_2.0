@@ -1,0 +1,25 @@
+---
+title: "Immunity Calculation 2.0"
+author: Alexander Upfill-Brown
+date: 2014-12-02
+output: html_document
+---
+
+###Introduction
+
+This page discusses work devoted to improving our calculation of population immunity based on NP-AFP data. The goal is to develop an algorithm that uses NP-AFP data for a locality and enables easier projections and testing of hypothetical immunization campaign calendars.
+
+This algorithm should have the follow properties:
+
+  1. Responsiveness - population immunity should respond immediately following a campaign.
+  2. Capability for small area estimates - one of the advantages of our current smoothing approach is that we are able to estimate immunity at the district-level and relate this to cases.
+  3. Easy to manipulate - inputs should be explicit so that hypothetical populations, accessibility structures, and campaign calendars can be readily evaluated.
+  
+###Immunity Calculation 1.0
+
+Currently, our best approach allows immunity calculation in six-month periods. The process is summarized below:
+
+  1. For each NP-AFP case aged 6-59 months, make onset date equal to the end date of the six-month period they reported AFP, then adjust birth date so that age is unchanged.
+  2. Estimate the campaign exposure based on campaigns occuring in district of onset within adjusted birth and onset dates.
+  3. Estimate the individual probability of protection using reported OPV doses, campaign exposure, and dose efficacies (described here: <http://amupfill.github.io/IPV_Immunity_Calculation/#immunity-calulcation-function>)
+  4. 
