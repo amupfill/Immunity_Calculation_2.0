@@ -64,9 +64,9 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <p>This page discusses work devoted to improving our calculation of population immunity based on NP-AFP data. The goal is to develop an algorithm that uses NP-AFP data for a locality and enables easier projections and testing of hypothetical immunization campaign calendars.</p>
 <p>This algorithm should have the follow properties:</p>
 <ol style="list-style-type: decimal">
-<li>Responsiveness - population immunity should respond immediately following a campaign.</li>
-<li>Capability for small area estimates - one of the advantages of our current smoothing approach is that we are able to estimate immunity at the district-level and relate this to cases.</li>
-<li>Easy to manipulate - inputs should be explicit so that hypothetical populations, accessibility structures, and campaign calendars can be readily evaluated.</li>
+<li><strong>Responsiveness</strong> - population immunity should respond immediately following a campaign.</li>
+<li><strong>Aplicability to small area estimates</strong> - one of the advantages of our current smoothing approach is that we are able to estimate immunity at the district-level and relate this to cases.</li>
+<li><strong>Easy to manipulate</strong> - inputs should be explicit so that hypothetical populations, accessibility structures, and campaign calendars can be readily evaluated.</li>
 </ol>
 </div>
 <div id="immunity-calculation-1.0" class="section level3">
@@ -75,9 +75,20 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <ol style="list-style-type: decimal">
 <li>For each NP-AFP case aged 6-59 months, make onset date equal to the end date of the six-month period they reported AFP, then adjust birth date so that age is unchanged.</li>
 <li>Estimate the campaign exposure based on campaigns occuring in district of onset within adjusted birth and onset dates.</li>
-<li>Estimate the individual probability of protection using reported OPV doses, campaign exposure, and dose efficacies (described here: <a href="http://amupfill.github.io/IPV_Immunity_Calculation/#immunity-calulcation-function" class="uri">http://amupfill.github.io/IPV_Immunity_Calculation/#immunity-calulcation-function</a>)</li>
-<li></li>
+<li>Estimate the individual probability of protection using reported OPV doses, campaign exposure, and dose efficacies (described <a href="http://amupfill.github.io/IPV_Immunity_Calculation/#immunity-calulcation-function">here</a>).</li>
+<li>Use a Bayesian heirarchical temporal model (see below), we estimate ‘smoothed’ district level immunity. This step is important as it reduces noise arising from the small NP-AFP sample size at the district-level. <span class="math">\[
+  \begin{align}
+I_{ijt} &amp;\sim \text{N}\left(X_{ijt},  \frac{\sigma^{2}}{n_{ijt}}\right)\\
+X_{ijt} &amp;= \alpha + P_{1i} + P_{1it} + D_{1ij} + D_{1ijt}
+  \end{align}
+  \]</span> Where <span class="math">\(X_{ijt}\)</span> is the immunity estimate in district <span class="math">\(j\)</span> in province <span class="math">\(i\)</span> in time period <span class="math">\(t\)</span>. <span class="math">\(I_{ijt}\)</span> is the unadusted immunity estimate from that period and <span class="math">\(n_{ijt}\)</span> is the number of NP-AFP cases on which that estimate is based.</li>
 </ol>
+<p>This approach meets criterion 1 and 2 in the list in the introduction, it fails miserably with regard to property 3. In this approach, campaign coverage &amp; accessibility are not modeled explicitly and so therefore cannot be adjusted easily. The hope is that version 2.0 will make the different underlying concepts of the immunity calculation easy to observe and manipulate.</p>
+</div>
+<div id="a-path-forward" class="section level3">
+<h3>A Path Forward</h3>
+<p>All immunity calculators will require model estimates of campaign coverage from NP-AFP (there are other data sources for campaign coverage–LQAS, IM–but NP-AFP is the most universal dataset) in some form or another.</p>
+<p>Hil has previously a method for infering campaign coverage in two accessibility groups from NP-AFP, and then combining this with the historical campaign calendar to reconstruct immunity in a location.</p>
 </div>
 
 
