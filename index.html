@@ -89,7 +89,7 @@ X_{ijt} &amp;= \alpha + P_{1i} + P_{1it} + D_{1ij} + D_{1ijt}
 <h3>A Path(s) Forward</h3>
 <p>All immunity alrogithms will require modeled estimates of campaign coverage from NP-AFP (there are other data sources for campaign coverage–LQAS, IM–but NP-AFP is the most universal dataset) in some form or another.</p>
 <p>Hil has previously a method for infering campaign coverage in two accessibility groups from NP-AFP, and then combining this with the historical campaign calendar to reconstruct immunity in a location. Campaign coverage was estimated for campaigns occuring within a given year. Therefore, a five year-old would have experienced campaigns at 5 different coverage levels. This would have to be taken into account when reconstructing immunity.</p>
-<p>I have previously used a heirachical Bayesian approach to estimate coverage by district, time-point, and age group. This coverage was not campaign specific. Furthermore, for a given time period, it represented the average lifetime coverage of a child of <span class="math">\(n\)</span> months with a date of onset in that period.</p>
+<p>I have previously used a heirachical Bayesian binomial model to estimate coverage by district, time-point, and age group. This coverage was not campaign specific. Instead, for a given time period, it represented the average lifetime coverage of a child in a certain age group with a date of onset in that period.</p>
 </div>
 
 
