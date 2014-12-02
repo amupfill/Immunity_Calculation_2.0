@@ -33,8 +33,10 @@ Currently, our best approach allows immunity calculation in six-month periods. T
   
 This approach meets criterion 1 and 2 in the list in the introduction, it fails miserably with regard to property 3. In this approach, campaign coverage & accessibility are not modeled explicitly and so therefore cannot be adjusted easily. The hope is that version 2.0 will make the different underlying concepts of the immunity calculation easy to observe and manipulate.
 
-###A Path Forward
+###A Path(s) Forward
 
-All immunity calculators will require model estimates of campaign coverage from NP-AFP (there are other data sources for campaign coverage--LQAS, IM--but NP-AFP is the most universal dataset) in some form or another.
+All immunity alrogithms will require modeled estimates of campaign coverage from NP-AFP (there are other data sources for campaign coverage--LQAS, IM--but NP-AFP is the most universal dataset) in some form or another.
 
-Hil has previously a method for infering campaign coverage in two accessibility groups from NP-AFP, and then combining this with the historical campaign calendar to reconstruct immunity in a location.
+Hil has previously a method for infering campaign coverage in two accessibility groups from NP-AFP, and then combining this with the historical campaign calendar to reconstruct immunity in a location. Campaign coverage was estimated for campaigns occuring within a given year. Therefore, a five year-old would have experienced campaigns at 5 different coverage levels. This would have to be taken into account when reconstructing immunity.
+
+I have previously used a heirachical Bayesian binomial model to estimate coverage by district, time-point, and age group. This coverage was not campaign specific. Instead, for a given time period, it represented the average lifetime coverage of a child in a certain age group with a date of onset in that period.
