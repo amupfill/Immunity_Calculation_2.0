@@ -1,3 +1,5 @@
+<!--.libPaths("C:/Files/R/3.1")-->
+
 ---
 title: "Immunity Calculation 2.0"
 author: Alexander Upfill-Brown
@@ -31,12 +33,213 @@ Currently, our best approach allows immunity calculation in six-month periods. T
   $$
   Where $X_{ijt}$ is the immunity estimate in district $j$ in province $i$ in time period $t$. $I_{ijt}$ is the unadusted immunity estimate from that period and $n_{ijt}$ is the number of NP-AFP cases on which that estimate is based.
   
-This approach meets criterion 1 and 2 in the list in the introduction, it fails miserably with regard to property 3. In this approach, campaign coverage & accessibility are not modeled explicitly and so therefore cannot be adjusted easily. The hope is that version 2.0 will make the different underlying concepts of the immunity calculation easy to observe and manipulate.
+This approach meets criterion **1** and **2** in the list in the introduction, it fails miserably with regard to property **3**. In this approach, campaign coverage & accessibility are not modeled explicitly and so therefore cannot be adjusted easily. The hope is that version 2.0 will make the different underlying concepts of the immunity calculation easy to observe and manipulate.
 
 ###A Path(s) Forward
 
 All immunity alrogithms will require modeled estimates of campaign coverage from NP-AFP (there are other data sources for campaign coverage--LQAS, IM--but NP-AFP is the most universal dataset) in some form or another.
 
+####Option 1
 Hil has previously a method for infering campaign coverage in two accessibility groups from NP-AFP, and then combining this with the historical campaign calendar to reconstruct immunity in a location. Campaign coverage was estimated for campaigns occuring within a given year. Therefore, a five year-old would have experienced campaigns at 5 different coverage levels. This would have to be taken into account when reconstructing immunity.
 
+As of now, this method does not account for differences by age nor does it currently extend to small spatial scales. That being said, following estimation of relevant paramaters from AFP data, this approach does meet criteria **1** and **3** above.
+
+####Option 2 - Heirachical Coverage Modeling
 I have previously used a heirachical Bayesian binomial model to estimate coverage by district, time-point, and age group. This coverage was not campaign specific. Instead, for a given time period, it represented the average lifetime coverage of a child in a certain age group with a date of onset in that period.
+
+While this method incorporates district-level heterogeneity, and the coverage outputs are easily manipulated in theory, this method does not account for accesibility. Combine the coverage outputs from this model with the campaign calendar to estimate responsive immunity estimates.
+
+###Heirachical Coverage Model
+```{r setup, include=F, message=F}
+library(ggplot2)
+load("C:/Files/Polio/Nigeria/Immunity Calc/WinBUGS Output/coverage_model_age_district_year_forKano_20141207.RData")
+cov.results = as.data.frame(cbind(data.frame(age_group=rep(0:4, each=44*11), index=rep(1:44,5*11), year=rep(rep(2004:2014,each=44),5)), output$summary[9:(8+44*5*11),c(1,3,7)]))
+names(cov.results)[4:6] = c("coverage_pred","lower_ci","upper_ci")
+
+afp = read.csv("C:/Files/Polio/Nigeria/Data/AFP/AFP_NP-AFP_Jan04-Mar14_regionEff.csv", stringsAsFactors=F)
+key = unique(afp[,c(1,2,3,4,5)])
+key = key[order(key$index),]
+
+camps = read.csv("C:/Files/Polio/Nigeria/Data/Campaigns/Nigeria_Campaigns_fromDB_throughDec-14.csv", stringsAsFac=F, sep=";")
+camps = subset(camps, grepl("Nigeria:Kano:",dot_name, fixed=T))
+camps$dot_name = tolower(camps$dot_name)
+key$dot_name = paste0("africa:nigeria:",key$ProvName,":",key$DistName)
+camps = merge(key, camps)
+camps$start_date = as.Date(camps$start_date)
+kano.camps = camps
+kano.camps$index = as.numeric(as.factor(kano.camps$id))
+kano.camps$start_date = as.Date(kano.camps$start_date)
+kano.camps$vaccinetype = ifelse(kano.camps$vaccinetype=="IPV+tOPV","IPV",kano.camps$vaccinetype)
+kano.camps = kano.camps[order(kano.camps$start_date),]
+
+initial.doses = data.frame(age_tranch=seq(0,4.5,.5), topv=rep(0:4,each=2),bopv=0,mopv1=0,mopv3=0,ipv=0)
+
+ipv.niave.t1 = .464; ipv.niave.t2 = .627; ipv.niave.t3 = .320
+ipv.opvback.t1 = .810; ipv.opvback.t2 = .950; ipv.opvback.t3 = .810
+# columns: tOPV, mOPV1, mOPV3, bOPV, IPV
+eff.south = matrix(c(.356,.525,0,.295,NA,.485,0,0,0,NA,.409,0,.582,.238,NA),ncol=5,nrow=3,byrow=T)
+eff.north = matrix(c(.192,.288,0,.299,NA,.489,0,0,0,NA,.177,0,.409,.240,NA),ncol=5,nrow=3,byrow=T)
+```
+
+Below is the WinBUGS model used for **Option 2** above. This model is used to estimate the age stratified coverage for districts in a given state, for example Kano.
+
+```{r, echo=F}
+model
+```
+
+Using the fitted age stratified coverages, we can reconstruct a hypothetical population with the historical campaign calendar. The associated function for this analysis are below.
+
+```{r}
+### Generate initial age-based dose distribution - this and the below function need to be integrated better
+generateInitialDoses = function(starting.year=2004, dist.index, coverage.results, campaigns, random=F){
+  campaigns.lim = campaigns[campaigns$start_date < as.Date(paste0(starting.year,"-01-01")) & campaigns$index==dist.index,]
+  coverage.use = coverage.results[coverage.results$year == starting.year & coverage.results$index==dist.index,]
+  initial.doses = data.frame(age_tranch=seq(0,4.5,.5), topv=0,bopv=0,mopv1=0,mopv3=0,ipv=0)
+  initial.doses$birth_date = as.Date(paste0(starting.year,"-01-01")) - round((initial.doses$age_tranch + .25)*364.75)
+  initial.doses$exposure = sapply(initial.doses$birth_date, function(x) length(which(campaigns.lim$start_date > x)))
+  if(random) initial.doses$topv = rbinom.vec(1, initial.doses$exposure,coverage.use$coverage_pred[match(trunc(initial.doses$age_tranch),coverage.use$age_group)])
+  if(!random) initial.doses$topv = round(initial.doses$exposure*coverage.use$coverage_pred[match(trunc(initial.doses$age_tranch),coverage.use$age_group)])
+  return(initial.doses[,c("age_tranch","topv","bopv","mopv1","mopv3","ipv")])
+}
+
+### Create AFP dataset given initials
+createAFPData = function(starting.year=2004, n=200, initial.doses, dist.index){
+  # initial.doses is a data.frame with column "age_tranch" and "doses
+  onset.date=as.Date(paste0(starting.year,"-01-01"))
+  birth.date=seq(as.Date(paste0(starting.year-5,"-01-10")),onset.date-1, length.out=n)
+  age = as.numeric(onset.date - birth.date)/364.75
+  age_tranch = cut(age, seq(0,5,.5), labels=seq(0,4.5,.5))
+  #return(data.frame(index=dist.index, id=1:n, onset.date=onset.date, birth.date = birth.date, age=age, age_tranch=age_tranch, doses = initial.doses$doses[match(age_tranch,initial.doses$age_tranch)]))
+  return(data.frame(index=dist.index, id=1:n, onset.date=onset.date, birth.date = birth.date, age=age, age_tranch=age_tranch, initial.doses[match(age_tranch,initial.doses$age_tranch),c("topv","bopv","mopv1","mopv3","ipv")]))
+}
+
+rbinom.vec = Vectorize(rbinom)
+
+### Immunity Calculation function
+calcImmunity_ipv = function(tOPV, bOPV, mOPV1, mOPV3, IPV=0, type=1, region, opvExperienced=F){
+  doses = tOPV+bOPV+mOPV1+mOPV3+IPV
+  if(is.na(doses)) return(NA)
+  if(!opvExperienced){
+    if(region=="north") eff = eff.north
+    if(region=="south") eff = eff.south
+    eff[,5] = c(ipv.niave.t1,ipv.niave.t2,ipv.niave.t3)
+  } else {
+    if(region=="north") eff = eff.north
+    if(region=="south") eff = eff.south
+    eff[,5] = c(ipv.opvback.t1,ipv.opvback.t2,ipv.opvback.t3)
+  }
+  return(1 - ((1-eff[type,1])^(tOPV+IPV) * (1-eff[type,4])^bOPV*(1-eff[type,2])^mOPV1 * (1-eff[type,3])^mOPV3 * (1-eff[type,5])^IPV))
+}
+calcImmunity.vec = Vectorize(calcImmunity_ipv)
+
+simulateCampaigns = function(campaigns=camps, coverage.results=cov.results, data, time.step=1, immunity.age.range=c(0.5,3), serotype){
+  onset.old = data$onset.date[1]
+  data$onset.date = data$onset.date + time.step
+  ages.new = as.numeric(data$onset.date - data$birth.date)/364.75
+  # Replace children over five
+  if(sum(ages.new>=5)){
+    inds = which(ages.new>=5)
+    data$birth.date[inds] = data$onset.date[1] - 1
+    data[inds,c("topv","bopv","mopv1","mopv3","ipv")] = rep(0,5)
+    data$id = max(data$id) + 1
+  }
+  data$age = as.numeric(data$onset.date - data$birth.date)/364.75
+  data$age_tranch = as.numeric(as.character(cut(data$age, seq(0,5,.5), labels=seq(0,4.5,.5))))
+  # Adjust doses if campaign
+  if(sum(campaigns$start_date > onset.old & campaigns$start_date <= data$onset.date[1])>0){
+    inds = which(campaigns$start_date > onset.old & campaigns$start_date <= data$onset.date[1])
+    for(c in 1:length(c)){
+      year = as.numeric(format(campaigns$start_date[inds[c]],"%Y"))
+      vaccine = tolower(campaigns$vaccinetype[inds[c]])
+      age_group = trunc(data$age_tranch)
+      coverage.results = coverage.results[coverage.results$year==year & coverage.results$index==data$index[1],]
+      coverages = coverage.results$coverage_pred[match(age_group,coverage.results$age_group)]
+      data[,vaccine] = data[,vaccine] + rbinom.vec(1, 1, coverages)
+    }
+  }
+  # Estimate Immunity
+  doses = data[data$age > immunity.age.range[1] & data$age < immunity.age.range[2],c("topv","bopv","mopv1","mopv3","ipv")]
+  immunity = calcImmunity.vec(tOPV=doses$topv+doses$ipv, bOPV=doses$bopv, mOPV1=doses$mopv1, mOPV3=doses$mopv3, type=serotype, region="north")
+  # Return data, and immunity
+  return(list(data=data,immunity=immunity))
+}
+
+st.err <- function(x) sd(x)/sqrt(length(x))
+
+### Simulate immunization over time
+simulateImmunization = function(start.year=2004, end.date=as.Date("2014-09-01"), time.step=10, quantile.immunity=F,
+                                campaigns, cov.results, n.samples=200, initial.doses=NA, dist.index, 
+                                immunity.age.range=c(0.5,3), serotype=1, generate.initials=T, initials.random=F){
+  # Creat data
+  campaigns = campaigns[campaigns$index==dist.index,]
+  if(generate.initials) initial.doses = generateInitialDoses(start.year, dist.index, cov.results, campaigns, random=initials.random)
+  data = createAFPData(start.year, n.samples, initial.doses, dist.index)
+  
+  output = simulateCampaigns(campaigns, cov.results, data, time.step, immunity.age.range=immunity.age.range, serotype=serotype)
+  onset.date = output$data$onset.date[1]
+  if(!quantile.immunity){
+    mean.im = mean(output$immunity)
+    immunity.output = data.frame(date = onset.date, mean=mean.im, 
+                                 lower_ci=mean.im-1.96*st.err(output$immunity), 
+                                 upper_ci=mean.im+1.96*st.err(output$immunity))
+  } else {
+    quant.im = c(mean(output$immunity)-sd(output$immunity), mean(output$immunity),mean(output$immunity)+sd(output$immunity))
+    immunity.output = data.frame(date = onset.date, mean=quant.im[2], lower_ci=quant.im[1], upper_ci=quant.im[3])
+  }
+  
+  while(onset.date < end.date){
+    output = simulateCampaigns(campaigns, cov.results, output$data, time.step, immunity.age.range=immunity.age.range, serotype=serotype)
+    (onset.date = output$data$onset.date[1])
+    if(!quantile.immunity){
+      mean.im = mean(output$immunity)
+      immunity.output = rbind(immunity.output, data.frame(date = onset.date, mean=mean.im, 
+                                   lower_ci=mean.im-1.96*st.err(output$immunity), 
+                                   upper_ci=mean.im+1.96*st.err(output$immunity)))
+    } else {
+      quant.im = c(mean(output$immunity)-sd(output$immunity), mean(output$immunity),mean(output$immunity)+sd(output$immunity))
+      immunity.output = rbind(immunity.output, data.frame(date = onset.date, mean=quant.im[2], lower_ci=quant.im[1], upper_ci=quant.im[3]))
+    }
+  }
+  
+  return(immunity.output)
+}
+
+```
+
+
+These can all be combined to produce the following:
+
+```{r}
+tmp = simulateImmunization(campaigns=kano.camps, initial.doses = initial.doses, dist.index=1, n.samples=300, 
+                           end.date=as.Date("2014-12-31"), cov.results=cov.results, generate.initials=F)
+tmp2 = simulateImmunization(campaigns=kano.camps, initial.doses = initial.doses, dist.index=1, serotype=2, time.step=10, 
+                            n.samples=300, end.date=as.Date("2014-12-31"), cov.results=cov.results, generate.initials=F)
+tmp$Serotype = "Type 1"; tmp2$Serotype = "Type 2"; pltdf = rbind(tmp, tmp2)
+ggplot(pltdf, aes(x=date, y=mean, group=Serotype)) + geom_line(aes(col=Serotype)) + 
+  geom_ribbon(aes(ymin=lower_ci, ymax=upper_ci, fill=Serotype), alpha=0.3) +
+  scale_y_continuous(limit=c(-0.02,1.02)) + theme(legend.position="bottom") + labs(x=NULL,y="Immunity", title="Kano Municipal, Kano")
+```
+
+Or this (note IPV campaign in Sumaila in the end of 2014):
+
+```{r, echo=FALSE}
+tmp = simulateImmunization(campaigns=kano.camps, initial.doses = initial.doses, dist.index=39, n.samples=300, 
+                           end.date=as.Date("2014-12-31"), cov.results=cov.results, generate.initials=F)
+tmp2 = simulateImmunization(campaigns=kano.camps, initial.doses = initial.doses, dist.index=39, serotype=2, time.step=10, 
+                            n.samples=300, end.date=as.Date("2014-12-31"), cov.results=cov.results, generate.initials=F)
+tmp$Serotype = "Type 1"; tmp2$Serotype = "Type 2"; pltdf = rbind(tmp, tmp2)
+ggplot(pltdf, aes(x=date, y=mean, group=Serotype)) + geom_line(aes(col=Serotype)) + 
+  geom_ribbon(aes(ymin=lower_ci, ymax=upper_ci, fill=Serotype), alpha=0.3) +
+  scale_y_continuous(limit=c(-0.02,1.02)) + theme(legend.position="bottom") + labs(x=NULL,y="Immunity", title="Sumaila, Kano")
+```
+
+The following plot summarizes the heterogeneity in the coverage estimates by LGA:
+
+```{r}
+out = lapply(1:44, function(x) {tmp = simulateImmunization(campaigns=kano.camps, dist.index=x, 
+                                                    n.samples=300, end.date=as.Date("2014-12-31"),cov.results=cov.results, 
+                                                    generate.initials=T, initials.random=T);tmp$index=x;tmp})
+outb = do.call("rbind", out)
+ggplot(outb, aes(x=date, y=mean, group=index)) + geom_line(col="darkblue",alpha=.4) + 
+  scale_y_continuous(limit=c(-0.02,1.02)) + labs(x=NULL,y="Immunity", title="Kano LGA Type 1 Immunity Traces")
+```
