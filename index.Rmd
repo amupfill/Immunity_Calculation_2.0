@@ -87,7 +87,9 @@ Below is the WinBUGS model used for **Option 2** above. This model is used to es
 model
 ```
 
-Using the fitted age stratified coverages, we can reconstruct a hypothetical population with the historical campaign calendar. The associated function for this analysis are below.
+Using the fitted age stratified coverages, we can reconstruct a hypothetical population and population immunity with the historical campaign calendar. The associated function for this analysis are below.
+
+###Immunity Reconstruction Functions
 
 ```{r}
 ### Generate initial age-based dose distribution - this and the below function need to be integrated better
@@ -206,6 +208,7 @@ simulateImmunization = function(start.year=2004, end.date=as.Date("2014-09-01"),
 
 ```
 
+###Kano Immunity Reconstruction Example
 
 These can all be combined to produce the following:
 
@@ -242,4 +245,16 @@ out = lapply(1:44, function(x) {tmp = simulateImmunization(campaigns=kano.camps,
 outb = do.call("rbind", out)
 ggplot(outb, aes(x=date, y=mean, group=index)) + geom_line(col="darkblue",alpha=.4) + 
   scale_y_continuous(limit=c(-0.02,1.02)) + labs(x=NULL,y="Immunity", title="Kano LGA Type 1 Immunity Traces")
+```
+
+We can do the same for type 2, this time the initial dose distributions are set equal for each LGA
+
+```{r, echo=T}
+initial.doses = data.frame(age_tranch=seq(0,4.5,.5), topv=rep(0:4,each=2),bopv=0,mopv1=0,mopv3=0,ipv=0)
+out2 = lapply(1:44, function(x) {tmp = simulateImmunization(campaigns=kano.camps, dist.index=x, n.samples=300, initial.doses=initial.doses,
+                                                            end.date=as.Date("2014-12-31"), serotype=2,cov.results=cov.results, 
+                                                           generate.initials=F, initials.random=F);tmp$index=x;tmp})
+out2b = do.call("rbind", out2)
+ggplot(out2b, aes(x=date, y=mean, group=index)) + geom_line(col="darkred",alpha=.4) + 
+  scale_y_continuous(limit=c(-0.02,1.02)) + labs(x=NULL,y="Immunity", title="Kano LGA Type 2 Immunity Traces")
 ```
